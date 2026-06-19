@@ -1,16 +1,14 @@
+import asyncio
 import os
 from pathlib import Path
-
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,14 +18,20 @@ from routes import clients, communications, content, invoices, proposals, seo, t
 from schemas import DashboardStats
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _init_db_background():
+    await asyncio.sleep(5)
     try:
         await init_db()
-        print("[DB] Connected ✓")
+        print("[DB] Tables ready ✓")
     except Exception as e:
-        print(f"[DB WARNING] Could not connect: {e}")
+        print(f"[DB] Init failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(_init_db_background())
     yield
+
 
 app = FastAPI(
     title="White-Label AI Agency Operations Platform",
@@ -40,12 +44,11 @@ allowed_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
-    "https://carefree-vitality-production-2d6a.up.railway.app",  # your frontend
+    "https://carefree-vitality-production-2d6a.up.railway.app",
 ]
 railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
 if railway_domain:
     allowed_origins.append(f"https://{railway_domain}")
-
 frontend_url = os.getenv("FRONTEND_URL")
 if frontend_url:
     allowed_origins.append(frontend_url)
@@ -75,21 +78,17 @@ async def dashboard_stats(db: AsyncSession = Depends(get_db)):
         pending_tasks = await db.scalar(
             select(func.count(Task.id)).where(Task.status.in_(["pending", "in-progress"]))
         )
-
         now = datetime.utcnow()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
         revenue = await db.scalar(
             select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
                 Invoice.payment_status == "paid",
                 Invoice.created_at >= month_start,
             )
         )
-
         pending_invoices = await db.scalar(
             select(func.count(Invoice.id)).where(Invoice.payment_status.in_(["pending", "overdue"]))
         )
-
         return DashboardStats(
             active_clients=active_clients or 0,
             pending_tasks=pending_tasks or 0,
