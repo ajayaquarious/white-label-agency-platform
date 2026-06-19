@@ -40,6 +40,7 @@ allowed_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
+    "https://carefree-vitality-production-2d6a.up.railway.app",  # your frontend
 ]
 railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
 if railway_domain:
