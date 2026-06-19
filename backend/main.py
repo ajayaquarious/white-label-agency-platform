@@ -1,6 +1,10 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
-load_dotenv()
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -18,9 +22,12 @@ from schemas import DashboardStats
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    try:
+        await init_db()
+        print("[DB] Connected ✓")
+    except Exception as e:
+        print(f"[DB WARNING] Could not connect: {e}")
     yield
-
 
 app = FastAPI(
     title="White-Label AI Agency Operations Platform",
