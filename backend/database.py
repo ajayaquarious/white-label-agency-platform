@@ -31,7 +31,7 @@ DATABASE_URL = _normalize_database_url(
     or "postgresql://postgres:postgres@localhost:5432/agency_platform"
 )
 
-engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=False)
+engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

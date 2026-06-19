@@ -1,8 +1,8 @@
 import asyncio
 import os
-from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -18,18 +18,13 @@ from routes import clients, communications, content, invoices, proposals, seo, t
 from schemas import DashboardStats
 
 
-async def _init_db_background():
-    await asyncio.sleep(5)
-    try:
-        await init_db()
-        print("[DB] Tables ready ✓")
-    except Exception as e:
-        print(f"[DB] Init failed: {e}")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(_init_db_background())
+    try:
+        await init_db()
+        print("[DB] Connected ✓")
+    except Exception as e:
+        print(f"[DB WARNING] Could not connect: {e}")
     yield
 
 
@@ -72,29 +67,13 @@ async def health_check():
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def dashboard_stats(db: AsyncSession = Depends(get_db)):
     try:
-        active_clients = await db.scalar(
-            select(func.count(Client.id)).where(Client.onboarding_status != "archived")
-        )
-        pending_tasks = await db.scalar(
-            select(func.count(Task.id)).where(Task.status.in_(["pending", "in-progress"]))
-        )
+        active_clients = await db.scalar(select(func.count(Client.id)).where(Client.onboarding_status != "archived"))
+        pending_tasks = await db.scalar(select(func.count(Task.id)).where(Task.status.in_(["pending", "in-progress"])))
         now = datetime.utcnow()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        revenue = await db.scalar(
-            select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(
-                Invoice.payment_status == "paid",
-                Invoice.created_at >= month_start,
-            )
-        )
-        pending_invoices = await db.scalar(
-            select(func.count(Invoice.id)).where(Invoice.payment_status.in_(["pending", "overdue"]))
-        )
-        return DashboardStats(
-            active_clients=active_clients or 0,
-            pending_tasks=pending_tasks or 0,
-            revenue_this_month=float(revenue or 0),
-            pending_invoices=pending_invoices or 0,
-        )
+        revenue = await db.scalar(select(func.coalesce(func.sum(Invoice.total_amount), 0)).where(Invoice.payment_status == "paid", Invoice.created_at >= month_start))
+        pending_invoices = await db.scalar(select(func.count(Invoice.id)).where(Invoice.payment_status.in_(["pending", "overdue"])))
+        return DashboardStats(active_clients=active_clients or 0, pending_tasks=pending_tasks or 0, revenue_this_month=float(revenue or 0), pending_invoices=pending_invoices or 0)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard stats: {str(e)}")
 
@@ -106,5 +85,4 @@ api_router.include_router(seo.router)
 api_router.include_router(tasks.router)
 api_router.include_router(communications.router)
 api_router.include_router(invoices.router)
-
 app.include_router(api_router)
