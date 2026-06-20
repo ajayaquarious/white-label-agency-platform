@@ -50,7 +50,12 @@ async def _call_n8n_webhook(domain: str, keywords: list[str]) -> dict | None:
                 json={"domain": domain, "keywords": keywords},
             )
             if response.status_code == 200:
-                return response.json()
+                data = response.json()
+                # n8n returns array - extract first item
+                if isinstance(data, list) and len(data) > 0:
+                    return data[0]
+                elif isinstance(data, dict):
+                    return data
     except Exception:
         return None
     return None
